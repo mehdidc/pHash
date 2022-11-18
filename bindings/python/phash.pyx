@@ -3,8 +3,7 @@ import os
 from libc.stdlib cimport free
 from libc.stdint cimport uint8_t, uint64_t
 
-from phash cimport (ph_mh_imagehash, ph_hammingdistance2,
-                    ph_dct_imagehash, ph_hamming_distance)
+from phash cimport (ph_mh_imagehash, ph_hammingdistance2, ph_dct_imagehash, ph_dct_imagehash_from_buffer, ph_hamming_distance)
 
 
 cdef class MHImageHash:
@@ -18,6 +17,9 @@ cdef class MHImageHash:
 
     def hamming_distance(self, MHImageHash other):
         return int(round(100 * ph_hammingdistance2(self.c_hash, len(self.c_hash), other.c_hash, len(other.c_hash))))
+    
+    def get_hash(self):
+        return self.c_hash
 
     @staticmethod
     def from_path(path, alpha=2.0, level=1.0):
@@ -33,6 +35,15 @@ cdef class MHImageHash:
             finally:
                 free(c_hash)
             return obj
+    # @staticmethod
+    # def from_buffer(data):
+        # cdef char* data_str = data
+        # cdef size_t size = len(data)
+        # obj = MHImageHash()
+        # if ph_mh_imagehash_from_buffer(data_str, size, obj.c_hash) == 0:
+            # return obj
+        # else:
+            # raise RuntimeError("ph_dct_imagehash failed")
 
 
 cdef class DCTImageHash:
@@ -43,6 +54,9 @@ cdef class DCTImageHash:
 
     def __setstate__(self, state):
         self.c_hash = state
+    
+    def get_hash(self):
+        return self.c_hash
 
     def hamming_distance(self, DCTImageHash other):
         return ph_hamming_distance(self.c_hash, other.c_hash)
@@ -55,3 +69,12 @@ cdef class DCTImageHash:
         else:
             raise RuntimeError("ph_dct_imagehash failed")
 
+    @staticmethod
+    def from_buffer(data):
+        cdef char* data_str = data
+        cdef size_t size = len(data)
+        obj = DCTImageHash()
+        if ph_dct_imagehash_from_buffer(data_str, size, obj.c_hash) == 0:
+            return obj
+        else:
+            raise RuntimeError("ph_dct_imagehash failed")

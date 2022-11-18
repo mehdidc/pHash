@@ -28,6 +28,7 @@
 #endif
 
 #include <cmath>
+#include <stdio.h>
 
 const char phash_project[] = "%s. Copyright 2008-2010 Aetilius, Inc.";
 char phash_version[255] = {0};
@@ -344,6 +345,55 @@ int ph_dct_imagehash(const char *file, ulong64 &hash) {
 
     return 0;
 }
+
+int ph_dct_imagehash_from_buffer(char *buffer, size_t size, ulong64 &hash) {
+    if (!buffer) {
+        return -1;
+    }
+    CImg<uint8_t> src;
+    FILE *f = fmemopen(buffer, size, "r");
+    try {
+        src.load_jpeg(f);
+    } catch (CImgIOException &ex) {
+        try {
+            src.load_png(f);
+        } catch (CImgIOException &ex) {
+            return -1;
+        }
+    }
+    CImg<float> meanfilter(7, 7, 1, 1, 1);
+    CImg<float> img;
+    if (src.spectrum() == 3) {
+        img = src.RGBtoYCbCr().channel(0).get_convolve(meanfilter);
+    } else if (src.spectrum() == 4) {
+        int width = src.width();
+        int height = src.height();
+        img = src.crop(0, 0, 0, 0, width - 1, height - 1, 0, 2)
+                  .RGBtoYCbCr()
+                  .channel(0)
+                  .get_convolve(meanfilter);
+    } else {
+        img = src.channel(0).get_convolve(meanfilter);
+    }
+
+    img.resize(32, 32);
+    const CImg<float> &C = dct_matrix;
+    CImg<float> Ctransp = C.get_transpose();
+
+    CImg<float> dctImage = (C)*img * Ctransp;
+
+    CImg<float> subsec = dctImage.crop(1, 1, 8, 8).unroll('x');
+
+    float median = subsec.median();
+    hash = 0;
+    for (int i = 0; i < 64; i++, hash <<= 1) {
+        float current = subsec(i);
+        if (current > median) hash |= 0x01;
+    }
+
+    return 0;
+}
+
 
 #endif
 
@@ -681,6 +731,82 @@ uint8_t *ph_mh_imagehash(const char *filename, int &N, float alpha, float lvl) {
 
     return hash;
 }
+
+/*
+uint8_t *ph_mh_imagehash_from_buffer(char *buffer, size_t size, int &N, float alpha, float lvl) {
+    if (!buffer) {
+        return NULL;
+    }
+    CImg<uint8_t> src;
+    FILE *f = fmemopen(buffer, size, "r");
+    try {
+        src.load_jpeg(f);
+    } catch (CImgIOException &ex) {
+        return NULL;
+    }
+    uint8_t *hash = (unsigned char *)malloc(72 * sizeof(uint8_t));
+    N = 72;
+    CImg<uint8_t> img;
+
+    if (src.spectrum() == 3) {
+        img = src.get_RGBtoYCbCr()
+                  .channel(0)
+                  .blur(1.0)
+                  .resize(512, 512, 1, 1, 5)
+                  .get_equalize(256);
+    } else {
+        img = src.channel(0)
+                  .get_blur(1.0)
+                  .resize(512, 512, 1, 1, 5)
+                  .get_equalize(256);
+    }
+    src.clear();
+
+    CImg<float> *pkernel = GetMHKernel(alpha, lvl);
+    CImg<float> fresp = img.get_correlate(*pkernel);
+    img.clear();
+    fresp.normalize(0, 1.0);
+    CImg<float> blocks(31, 31, 1, 1, 0);
+    for (int rindex = 0; rindex < 31; rindex++) {
+        for (int cindex = 0; cindex < 31; cindex++) {
+            blocks(rindex, cindex) =
+                fresp
+                    .get_crop(rindex * 16, cindex * 16, rindex * 16 + 16 - 1,
+                              cindex * 16 + 16 - 1)
+                    .sum();
+        }
+    }
+    int hash_index;
+    int nb_ones = 0, nb_zeros = 0;
+    int bit_index = 0;
+    unsigned char hashbyte = 0;
+    for (int rindex = 0; rindex < 31 - 2; rindex += 4) {
+        CImg<float> subsec;
+        for (int cindex = 0; cindex < 31 - 2; cindex += 4) {
+            subsec = blocks.get_crop(cindex, rindex, cindex + 2, rindex + 2)
+                         .unroll('x');
+            float ave = subsec.mean();
+            cimg_forX(subsec, I) {
+                hashbyte <<= 1;
+                if (subsec(I) > ave) {
+                    hashbyte |= 0x01;
+                    nb_ones++;
+                } else {
+                    nb_zeros++;
+                }
+                bit_index++;
+                if ((bit_index % 8) == 0) {
+                    hash_index = (int)(bit_index / 8) - 1;
+                    hash[hash_index] = hashbyte;
+                    hashbyte = 0x00;
+                }
+            }
+        }
+    }
+
+    return hash;
+}
+*/
 #endif
 
 int ph_bitcount8(uint8_t val) {

@@ -230,6 +230,7 @@ int ph_compare_images(const char *file1, const char *file2,double &pcc, double s
  *  /return int value - -1 for failure, 1 for success
  */
 int ph_dct_imagehash(const char* file,ulong64 &hash);
+int ph_dct_imagehash_from_buffer(char* buffer, size_t size, ulong64 &hash);
 
 
 #ifdef HAVE_VIDEO_HASH
